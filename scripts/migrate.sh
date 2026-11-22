@@ -39,15 +39,18 @@ fail() { printf '%s\n' "$3" > "$STATE/fail/$1.$2"; log "FAIL $1 $2: $3"; }
 ok() { rm -f "$STATE/fail/$1.$2"; touch "$STATE/done/$1.$2"; }
 is_done() { [ -f "$STATE/done/$1.$2" ]; }
 
-# gh api with retries on 5xx / rate limits. Errors go to the log.
+# gh with a hard timeout: a stalled connection otherwise hangs for minutes.
+ghx() { perl -e 'alarm shift; exec @ARGV' "${API_TIMEOUT:-90}" gh "$@"; }
+
+# gh api with retries on 5xx / rate limits / network errors. Errors go to the log.
 LAST_API_ERR=
 api() {
   local i=0 out err
   err=$(mktemp "$STATE/.apierr.XXXXXX")
   while :; do
-    if out=$(gh api "$@" 2>"$err" </dev/null); then rm -f "$err"; printf '%s' "$out"; return 0; fi
+    if out=$(ghx api "$@" 2>"$err" </dev/null); then rm -f "$err"; printf '%s' "$out"; return 0; fi
     i=$((i + 1))
-    if grep -qE 'HTTP (5[0-9][0-9]|429)|rate limit|abuse|timed out' "$err" && [ $i -lt 5 ]; then
+    if { [ ! -s "$err" ] || grep -qE 'HTTP (5[0-9][0-9]|429)|rate limit|abuse|timed out|connection reset|EOF' "$err"; } && [ $i -lt 5 ]; then
       sleep $((i * 15)); continue
     fi
     printf 'api %s: %s\n' "$*" "$(tr '\n' ' ' < "$err")" >> "$LOG"
@@ -56,9 +59,9 @@ api() {
   done
 }
 # Same, but reads the request body from stdin.
-api_in() { local o; o=$(gh api "$@" --input - 2>>"$LOG") || return 1; printf '%s' "$o"; }
+api_in() { local o; o=$(ghx api "$@" --input - 2>>"$LOG") || return 1; printf '%s' "$o"; }
 # For lookups where a 404 is an expected answer.
-apiq() { local o; o=$(gh api "$@" 2>/dev/null </dev/null) || return 1; printf '%s' "$o"; }
+apiq() { local o; o=$(ghx api "$@" 2>/dev/null </dev/null) || return 1; printf '%s' "$o"; }
 
 lc() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
 is_keep() { local k n; n=$(lc "$1"); for k in $KEEP; do [ "$(lc "$k")" = "$n" ] && return 0; done; return 1; }
