@@ -13,6 +13,11 @@
 #                 it clean (all required checks green); otherwise it is skipped.
 #   deploy:<service>  dispatch the infra repo's deploy for one service (to
 #                 finish a publish whose deploy was rate-limited).
+#   rerun:<repo>  re-run the publish workflow's run for the CURRENT head of the
+#                 default branch (for protected branches, where an empty commit
+#                 cannot be pushed, and for a deploy that was dropped). Refuses
+#                 if the newest publish run is not for the head: re-running an
+#                 older run would redeploy old code.
 #
 # For each item, in order:
 #   1. wait until <owner>/<infra-repo> has no Deploy run queued or in progress
@@ -86,6 +91,27 @@ for item in "$@"; do
     printf '%s\t%s\t-\truns: -\tdeploys: %s\n' "$(now)" "$item" "${deploys:-none}" >> "$RESULTS"
     note "$item: deploys: ${deploys:-none}"
     case ",$deploys," in *,failure,*) note "stopping: $item failed"; exit 1 ;; esac
+    sleep "$SPACING"; continue ;;
+  esac
+  case "$item" in rerun:*)
+    repo=${item#rerun:}
+    def=$(q "repos/$OWNER/$repo" --jq .default_branch)
+    head=$(q "repos/$OWNER/$repo/git/ref/heads/$def" --jq .object.sha)
+    rid=$(q "repos/$OWNER/$repo/actions/runs?head_sha=$head&per_page=30" \
+      --jq "[.workflow_runs[] | select(.name | test(\"${PUBLISH_WORKFLOW:-publish}\"; \"i\"))][0].id")
+    [ -n "$rid" ] && [ "$rid" != null ] || { note "$item: no publish run for the head ${head:0:9}; not re-running anything older"; printf '%s\t%s\tno publish run for head\n' "$(now)" "$item" >> "$RESULTS"; continue; }
+    gh run rerun "$rid" -R "$OWNER/$repo" >/dev/null 2>&1 || { note "$item: rerun refused"; printf '%s\t%s\trerun refused\n' "$(now)" "$item" >> "$RESULTS"; continue; }
+    note "$item: re-running run $rid for head ${head:0:9}"
+    i=0; sleep 20
+    while [ $i -lt 120 ] && [ "$(q "repos/$OWNER/$repo/actions/runs/$rid" --jq .status)" != completed ]; do sleep 30; i=$((i + 1)); done
+    runs=$(q "repos/$OWNER/$repo/actions/runs/$rid" --jq 'if (.conclusion | IN("success","skipped","neutral")) then "ok" else .name + "=" + (.conclusion // .status) end')
+    sleep 20; wait_deploy_idle
+    deploys=$(q "repos/$OWNER/$INFRA/actions/runs?per_page=30&created=%3E$started" \
+      --jq "[.workflow_runs[] | select(.name == \"$DEPLOY_WORKFLOW\") | (.conclusion // .status)] | join(\",\")")
+    printf '%s\t%s\t%s\truns: %s\tdeploys: %s\n' "$(now)" "$item" "${head:0:9}" "$runs" "${deploys:-none}" >> "$RESULTS"
+    note "$item: runs: $runs; deploys: ${deploys:-none}"
+    [ "$runs" = ok ] || { note "stopping: $item failed"; exit 1; }
+    case ",$deploys," in *,failure,*|*,cancelled,*) note "stopping: a deploy after $item did not finish"; exit 1 ;; esac
     sleep "$SPACING"; continue ;;
   esac
   def=$(q "repos/$OWNER/$repo" --jq .default_branch)
