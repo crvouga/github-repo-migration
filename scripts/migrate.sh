@@ -292,9 +292,16 @@ verify_one() {
     else
       [ "$(lc "$(apiq "repos/$FROM/$n" --jq .full_name)")" = "$(lc "$r")" ] && echo "redirect ok (API)" || echo "redirect MISMATCH"
     fi
-    v=$(apiq "repos/$r/branches/$(rec "$n" .default_branch)" --jq .protected)
-    [ "$v" = "$(rec "$n" .default_branch_protected)" ] && echo "branch protection ok ($v)" \
-      || echo "branch protection MISMATCH ($(rec "$n" .default_branch_protected) -> $v)"
+    # Compare the same way record does: does a classic protection rule exist?
+    # (An empty repo has no branch, so there is nothing to compare.)
+    if [ "$(rec "$n" .size)" != 0 ]; then
+      apiq "repos/$r/branches/$(rec "$n" .default_branch)/protection" >/dev/null && v=true || v=false
+      [ "$v" = "$(rec "$n" .default_branch_protected)" ] && echo "branch protection ok ($v)" \
+        || echo "branch protection MISMATCH ($(rec "$n" .default_branch_protected) -> $v)"
+      v=$(apiq "repos/$r/rulesets" --jq 'length')
+      [ "$v" = "$(rec "$n" '.rulesets | length')" ] && echo "rulesets ok ($v)" \
+        || echo "rulesets MISMATCH ($(rec "$n" '.rulesets | length') -> $v)"
+    fi
     v=$(apiq "repos/$r/actions/permissions" --jq .enabled)
     [ "$v" = "$(rec "$n" '.actions.enabled')" ] && echo "actions enabled ok ($v)" || echo "actions enabled MISMATCH ($(rec "$n" .actions.enabled) -> $v)"
     if [ -s "$BASELINE/$n.json" ]; then

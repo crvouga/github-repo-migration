@@ -66,7 +66,11 @@ apply_one() {
 
 commit_one() {
   local d=$WORK/$1
-  git -C "$d" -c user.name="$(git config user.name)" -c user.email="$(git config user.email)" \
+  # Commit as the signed-in GitHub user with their noreply address (a machine
+  # without user.email set would otherwise leak its hostname).
+  : "${AUTHOR_NAME:=$(gh api user --jq '.name // .login')}"
+  : "${AUTHOR_EMAIL:=$(gh api user --jq '"\(.id)+\(.login)@users.noreply.github.com"')}"
+  git -C "$d" -c user.name="$AUTHOR_NAME" -c user.email="$AUTHOR_EMAIL" \
     commit -q -a -m "$MSG${TRAILER:+
 
 $TRAILER}"

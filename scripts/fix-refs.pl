@@ -79,7 +79,10 @@ while (my $f = <STDIN>) {
     $n++;
     if ($l !~ /\Q$FROM\E/i) { $out .= $l; next }
     (my $rest = $l) =~ s/\Q$FROM\E//gi;
-    my $both = $rest =~ /(?<![A-Za-z0-9_-])\Q$TO\E(?![A-Za-z0-9_-]*\Q$FROM\E)/i && !$anchored;
+    # "Both owners" means $TO also appears as a bare owner or an owner wildcard
+    # ("crvouga", crvouga/*), not as an npm scope (@crvouga/pkg), a longer word
+    # (crvouga-skills) or an owner/repo path (crvouga/workspace).
+    my $both = !$anchored && $rest =~ m~(?<![\@A-Za-z0-9_./-])\Q$TO\E(?=/\*|["'`\s,|)\]};:]|$)~i;
     my $new = $both ? $l : rewrite_line($l);
     (my $show = $l) =~ s/\s+$//; $show = substr($show, 0, 300);
     if ($new ne $l) { $changed = 1; print "$f:$n:$show\n" if $mode eq 'scan' }

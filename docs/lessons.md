@@ -1,0 +1,62 @@
+# Lessons: what a move breaks and what redirects cover
+
+Collected from the 2026-11-20 move to the org and the 2026-11-21 move back.
+Add to this file whenever a migration teaches something new.
+
+## What GitHub's redirects cover
+
+After a transfer GitHub redirects the old location to the new one, for as long
+as nobody creates a repo at the old location.
+
+| Works through the redirect | Does not |
+|---|---|
+| `git clone` / `fetch` / `push` over HTTPS and SSH | `uses: old-owner/repo/...@ref` in workflows (actions and reusable workflows): rewrite |
+| Web URLs (issues, PRs, files, releases) | OIDC subject claims (`repo:old-owner/repo:...`) in AWS, Vault, npm trusted publishing: the claim carries the new owner |
+| REST API by `repos/old-owner/repo` (answers 301; `gh` and `curl -L` follow it) | API calls from scripts that do not follow redirects (plain `curl` without `-L`; POSTs get a 307) |
+| Old repo *names* (renames) keep redirecting after a transfer | GitHub Pages URLs (`old-owner.github.io/repo`): needs a redirect site |
+| Go module paths, `go get` | Container images (`ghcr.io/old-owner/image`): packages belong to the account, not the repo, and do not move |
+| | GitHub App installations (Vercel, Railway, Heroku): per account, re-check after a move |
+| | Re-running an old workflow run: it reuses the old workflow file, old references included |
+
+## What a transfer keeps and loses
+
+Kept: issues, PRs, stars, watchers, releases, wiki, webhooks, deploy keys,
+repo-level secrets and variables, environments, topics, Pages config, repo
+rulesets, Dependabot and code scanning config.
+
+Lost or changed:
+
+- **Default `GITHUB_TOKEN` permission** follows the new owner's policy. The org
+  (enterprise) forces read-only and forbids Actions approving PRs. Restore
+  per-repo values with `migrate.sh settings` when moving to the personal account;
+  when moving to the org, workflows that relied on a write default need an
+  explicit `permissions:` block.
+- **Org-level** secrets, variables, rulesets, teams: not carried to a user account.
+- **Packages** stay with the old owner. A repo can keep publishing to a package
+  it has Actions access to, but `GITHUB_TOKEN` cannot push to a package owned by
+  another account.
+- **Branch protection** on private repos needs a paid plan on the target.
+- **Pages URL** changes with the owner.
+
+## Traps
+
+- A lookup of `new-owner/repo` succeeds *before* the transfer when an older
+  redirect exists for that name. Check ownership by repository id
+  (`GET /repositories/<id>`), not by name.
+- One stalled connection can hang `gh api` for minutes. `migrate.sh` wraps every
+  call in a 90-second timeout and retries.
+- All automation shares the account's 5,000 requests/hour API limit, including
+  CI tokens that are personal access tokens. A full `record` + `transfer` +
+  `settings` + `verify` for ~100 repos costs roughly 2,500 requests.
+- Re-running an old publish/deploy/release run rebuilds and redeploys old code.
+  Push a fresh commit or dispatch the workflow on the head instead.
+- Deploy pipelines share third-party rate limits (Railway answered 429 when ten
+  repos published at once). Push reference fixes one repo at a time.
+- Two Pages redirect sites pointing at each other loop. When project sites move
+  back, empty the forward list of the site on the side they returned to.
+- Keep dual-owner matchers (OIDC trust lists, URL allow-lists that accept both
+  `crvouga/*` and `crvouga-organization/*`). They make the next move free.
+- The org's Actions can be disabled above the org (enterprise policy/billing)
+  while every org and repo setting still reads "enabled". Symptom: dispatch
+  returns `422 Actions has been disabled for this repository` and runs stay
+  queued. This is what triggered the move back on 2026-11-21.
