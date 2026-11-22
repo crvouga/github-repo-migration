@@ -49,6 +49,19 @@ Lost or changed:
 
 ## Traps
 
+- **Never `git commit -a` from a macOS checkout of someone else's tree.** A repo
+  with paths that differ only by case (the Linux kernel has many) checks out as
+  "modified" on a case-insensitive filesystem. The 2026-11-20 migration
+  committed that and overwrote 13 kernel files. Check `git status` is clean
+  before changing anything and add only the files you rewrote.
+- **Deleted rulesets can be recovered.** An org's audit log keeps the full
+  definition of every destroyed ruleset (`action:repository_ruleset.destroy`).
+  User accounts have no audit log: snapshot rulesets before deleting any.
+- **`[skip ci]` in the commit subject** lets a cosmetic fix land in a repo whose
+  push pipeline publishes or deploys.
+- **An auto-merge workflow plus a missing required check merges instantly.**
+  Restore branch rules before opening pull requests.
+
 - A lookup of `new-owner/repo` succeeds *before* the transfer when an older
   redirect exists for that name. Check ownership by repository id
   (`GET /repositories/<id>`), not by name.

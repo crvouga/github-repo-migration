@@ -25,6 +25,8 @@ URLs or anything from `state/` (gitignored). Refer to private repos by count.
 | `scripts/migrate.sh` | Transfers repos `$FROM` → `$TO`, restores per-repo settings, checks redirects. Idempotent. |
 | `scripts/repoint-remotes.sh` | Points local clones on a machine at the new owner. Standalone; run it on every machine. |
 | `scripts/sweep-refs.sh` + `scripts/fix-refs.pl` | Finds and fixes references to the old owner inside repo files. |
+| `scripts/audit.sh` | **Is the migration finished?** One PASS/FAIL line per category of leftover. A migration is done when it passes. |
+| `scripts/restore-rulesets.sh` | Re-creates deleted branch rulesets from the definitions in an org's audit log. |
 | `scripts/cancel-stale-runs.sh` | Cancels runs left in the queue from before a cutoff (for example from a period with Actions disabled). |
 | `scripts/pages-redirect-site.sh` | Builds the small Pages site that forwards `<old-owner>.github.io/<repo>` to the new owner. |
 | `docs/status.md` | Living status of the current migration. |

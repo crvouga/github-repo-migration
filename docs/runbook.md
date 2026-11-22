@@ -25,7 +25,8 @@ Needs `gh` (signed in as `crvouga`, scopes `repo`, `workflow`, `admin:org`), `jq
 | 9 | Repoint clones on every machine | `scripts/repoint-remotes.sh $FROM $TO` | local git config only |
 | 10 | Fix references inside repos | `scripts/sweep-refs.sh scan`, review, then `push` / `pr` | yes (commits) |
 | 11 | Re-check CI on the repos that have workflows | by hand / per repo | no |
-| 12 | Update `docs/status.md`, `docs/history.md`, `docs/lessons.md` | | |
+| 12 | **Prove it is finished** | `scripts/audit.sh` (on every machine for `clones`) | no |
+| 13 | Update `docs/status.md`, `docs/history.md`, `docs/lessons.md` | | |
 
 Steps 1–7 are safe to re-run: each step skips work that is already done.
 
@@ -73,6 +74,31 @@ are left alone on purpose and listed as `REVIEW`.
 `<new-owner>.github.io/<repo>/...`. Publish it as the repo
 `<old-owner>/<old-owner>.github.io`. Remove the forwarders for the same repos
 from the *new* owner's `.github.io` site, or the two sites redirect in a loop.
+
+## Definition of done
+
+A migration is finished when `scripts/audit.sh` exits 0 and `docs/status.md` has
+no open item. "Moved and redirecting" is not finished. Every item below is
+either closed or blocked on one named thing only the owner can supply, and that
+thing has been asked for.
+
+- Every repo is under the new owner; nothing but the keep-list is left behind.
+- No file in any repo (moved or not, archived or not) selects the old owner.
+- No Actions variable names the old owner or its numeric ID. Secrets cannot be
+  read: check the ones that hold repo names or OIDC subjects by hand.
+- Every setting a transfer resets is back: workflow token permission, branch
+  rulesets and protection, code scanning default setup, secret scanning, Pages.
+- External trust that names the owner works from the new location: OIDC
+  subjects in cloud roles and secret managers, npm trusted publishers, image
+  registries. Proven by a green run, not by reading config.
+- Every workflow's latest default-branch run is green, or shown to have been
+  red before the move.
+- No migration pull request is open. No stale queued run is left.
+- Every clone on every machine points at the new owner.
+- Whatever the migration created only for itself (redirect sites, scratch
+  clones, package copies) is either still needed and documented, or removed.
+- Damage check: every commit the tooling pushed changed only the files it
+  meant to (`gh api repos/<o>/<r>/commits/<sha> --jq '.files[].filename'`).
 
 ## Rules
 
