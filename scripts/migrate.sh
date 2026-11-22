@@ -106,7 +106,7 @@ preflight() {
 
 # Snapshot of everything a transfer could change, taken before the move.
 record_one() {
-  local n=$1 r f b def priv pages ap sel wp fa fp acc prot rules hooks envs wfs
+  local n=$1 r f b def priv pages ap sel wp fa fp acc prot rules hooks envs wfs cs
   f=$STATE/repo/$n.json
   [ -s "$f" ] && return 0
   r=$FROM/$n
@@ -133,7 +133,9 @@ record_one() {
   hooks=$(apiq "repos/$r/hooks" --jq 'length') || hooks=0
   envs=$(apiq "repos/$r/environments" --jq '[.environments[].name]') || envs='[]'
   wfs=$(apiq "repos/$r/actions/workflows?per_page=100" --jq '[.workflows[] | {id, path, name, state}]') || wfs='[]'
-  printf '%s' "$b" | jq --argjson pages "$pages" --argjson ap "$ap" --argjson sel "$sel" \
+  # A transfer resets code scanning default setup and the security features.
+  cs=$(apiq "repos/$r/code-scanning/default-setup" --jq '{state, languages, query_suite}') || cs=null
+  printf '%s' "$b" | jq --argjson cs "$cs" --argjson pages "$pages" --argjson ap "$ap" --argjson sel "$sel" \
     --argjson wp "$wp" --argjson fa "$fa" --argjson fp "$fp" --argjson acc "$acc" \
     --argjson prot "$prot" --argjson rules "$rules" --argjson hooks "$hooks" --argjson envs "$envs" \
     --argjson wfs "$wfs" '{
@@ -142,7 +144,8 @@ record_one() {
       pages: $pages, actions: $ap, selected_actions: $sel, workflow_perms: $wp,
       fork_pr_approval: $fa, fork_pr_private: $fp, actions_access: $acc,
       default_branch_protected: ($prot != null), protection: $prot, rulesets: $rules,
-      hooks: $hooks, environments: $envs, workflows: $wfs }' > "$f.tmp" && mv "$f.tmp" "$f" \
+      hooks: $hooks, environments: $envs, workflows: $wfs,
+      code_scanning: $cs, security_and_analysis: (.security_and_analysis // null) }' > "$f.tmp" && mv "$f.tmp" "$f" \
     || { rm -f "$f.tmp"; fail record "$n" "could not write state"; return 1; }
   ok record "$n"
   log "recorded $n ($(jq -r '.visibility + ", " + .default_branch' "$f"))"
@@ -231,6 +234,15 @@ settings_one() {
     | api_in -X PUT "repos/$r/actions/permissions/fork-pr-workflows-private-repos" >/dev/null || log "WARN $n: private fork PR settings"; }
   [ "$(base "$n" .actions_access)" != null ] && { base "$n" .actions_access \
     | api_in -X PUT "repos/$r/actions/permissions/access" >/dev/null || log "WARN $n: actions access level"; }
+  # Code scanning default setup and security features (only in newer snapshots).
+  if [ "$(base "$n" '.code_scanning.state // empty')" = configured ]; then
+    base "$n" '{state: "configured", languages: (.code_scanning.languages | map(select(. != "javascript" and . != "typescript"))), query_suite: (.code_scanning.query_suite // "default")}' \
+      | api_in -X PATCH "repos/$r/code-scanning/default-setup" >/dev/null || log "WARN $n: code scanning default setup"
+  fi
+  if [ "$(base "$n" '.security_and_analysis // empty')" != "" ] && [ "$(base "$n" .security_and_analysis)" != null ]; then
+    base "$n" '{security_and_analysis: (.security_and_analysis | with_entries(select(.value.status == "enabled") | .value |= {status}))}' \
+      | api_in -X PATCH "repos/$r" >/dev/null || log "WARN $n: security features"
+  fi
   ok settings "$n"
 }
 

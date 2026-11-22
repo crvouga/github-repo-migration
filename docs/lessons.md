@@ -37,6 +37,15 @@ Lost or changed:
   another account.
 - **Branch protection** on private repos needs a paid plan on the target.
 - **Pages URL** changes with the owner.
+- **Security features are reset**: secret scanning, push protection and CodeQL
+  default setup come back disabled / `not-configured` after a transfer to a user
+  account. An org security configuration can also switch CodeQL on for every
+  repo on arrival. `migrate.sh record` captures both; `settings` restores them.
+- **Immutable OIDC subjects** (`repo:<owner>@<owner-id>/<repo>@<repo-id>`) carry
+  the numeric owner ID. A search for the owner *name* does not find them: look
+  for the IDs too (user `crvouga` = 49178412, org = 354284559).
+- **Repo variables and secrets hold owner names too** (`gh variable list`). A
+  scan of tracked files cannot see them.
 
 ## Traps
 

@@ -2,7 +2,7 @@
 
 Single source of truth for the running migration. Update it as work lands.
 
-**Last updated:** 2026-11-22 02:25 UTC
+**Last updated:** 2026-11-22 02:45 UTC
 **State:** repos moved and verified; machines repointed; **reference fixes inside repos in progress.**
 
 Local state for this run (not in git): `state/crvouga-organization--crvouga/` on
@@ -61,7 +61,7 @@ Its OpenTofu apply generates the `publish.yml` caller workflow in the app repos.
 | personal | 446 (+32 review) | Deploy gate on repo name, OpenTofu `owner`, inventory, generated `llms*.txt`, portfolio data | agent (running) | in progress |
 | mockingbird | 948 (+403 review) | mostly generated docs/`llms.txt`, package metadata, release + health scripts | agent (running) | in progress |
 | atlas | 306 (+11) | schema `$id` URLs, docs, generated `llms*.txt`, release + health scripts, image owner | agent (running) | in progress |
-| gamezilla | 53 (+7) | workflows, scripts, AWS OIDC trust (already trusts `crvouga/gamezilla`) | agent (running) | in progress |
+| gamezilla | 60 + owner ID | text links, plus the numeric owner ID in `libs/infra-shared-ts/tofu/global.tfvars.json` and the `PRODUCT_IDENTITY_JSON` repo variable | agent (done) | ⏸ PR [#447](https://github.com/crvouga/gamezilla/pull/447) open, checks red until the owner restores CI trust (see "Needs the owner" 7). Repo variable already set back to `crvouga/gamezilla`. |
 | dev-fleet | 49 (+2) | package metadata, schema URLs, release | agent (running) | in progress |
 | fleet | 32 | publish caller, docs | after `personal` | not started |
 | moviefinder | 29 | publish caller, docs | after `personal` | not started |
@@ -100,7 +100,9 @@ triggers a publish that calls into `personal`.
 3. **npm trusted publishers** must name the owner in the OIDC claim. `@crvouga/dev-fleet` was switched to `crvouga-organization/dev-fleet` on 2026-11-21 and needs switching back (needs your npm 2FA): `npm trust github @crvouga/dev-fleet --repo crvouga/dev-fleet --file release.yml --allow-publish`. `atlas` and the `@crvouga/mockingbird*` packages still trust `crvouga/*` and need nothing.
 4. **Org container images**: 61 images were copied to `ghcr.io/crvouga-organization` (private). Four repos published there since (atlas, pillbox, normalizer.app, moviefinder.app-go); their newest images are only in the org until those repos publish to `ghcr.io/crvouga` again. Delete the org copies once nothing pulls from them: <https://github.com/orgs/crvouga-organization/packages>.
 5. **Why Actions was disabled for the org** is still unknown (enterprise policy or billing; the token cannot see the enterprise). Check <https://github.com/enterprises/crvouga-enterprise/settings/actions> before any move back to the org.
-6. **This repo is public.** The docs name only public repos. Say so if you would rather make it private and track private repos by name.
+6. **Security features were reset by the transfer.** Secret scanning and push protection now read `disabled` on the repos checked, and CodeQL default setup reads `not-configured` everywhere. CodeQL is correct for 101 repos (only `gamezilla` had it before 2026-11-20; the org had switched it on for 75 repos) and was restored on `gamezilla` (`actions`, `javascript-typescript`). The earlier snapshots did not record secret scanning, so its previous state per repo is unknown: re-enable it where you want it (free on public repos). `migrate.sh record` now captures both for next time.
+7. **gamezilla CI trust.** gamezilla trusts GitHub's immutable OIDC subject (owner *ID* + repo ID), not the owner name. Its secrets login rejects every job (`Access denied: OIDC subject not allowed`) until you run, from the PR #447 branch: `bun run infra:bootstrap --recover-ci-identity` (needs your Infisical login). Then re-run Verify PR on #447, merge when `verify:end` is green, check the Release run, and run `bun run infra:bootstrap` with an AWS login to reconcile AWS trust and repo settings (the `main` ruleset is missing).
+8. **This repo is public.** The docs name only public repos. Say so if you would rather make it private and track private repos by name.
 
 ## Rules while this is open
 
