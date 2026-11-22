@@ -8,8 +8,11 @@
 # An item is either
 #   <repo>        push an empty commit to the default branch (a caller workflow
 #                 that only triggers on push has no other way to run), or
-#   <repo>#<pr>   squash-merge that pull request, but only if GitHub reports it
-#                 clean (all required checks green); otherwise it is skipped.
+#   <repo>#<pr>   merge that pull request (squash, else merge, else rebase:
+#                 whichever the branch rules allow), but only if GitHub reports
+#                 it clean (all required checks green); otherwise it is skipped.
+#   deploy:<service>  dispatch the infra repo's deploy for one service (to
+#                 finish a publish whose deploy was rate-limited).
 #
 # For each item, in order:
 #   1. wait until <owner>/<infra-repo> has no Deploy run queued or in progress
@@ -17,18 +20,20 @@
 #   3. wait for every run on that commit to finish
 #   4. wait for the infra repo's Deploy to go idle again, and record the
 #      conclusion of the deploy runs that started after the trigger
-#   5. pause $SPACING seconds (default 420)
+#   5. pause $SPACING seconds (default 1500)
 #
 # Why one at a time: the infra repo keeps one pending run per concurrency group
 # (a second waiting deploy is cancelled, leaving that service on its old
-# image), and the hosting provider rate-limits full plans (4 in 40 minutes hit
-# HTTP 429 on 2026-11-22). Stops at the first failure so nothing piles up.
+# image), and the hosting provider rate-limits full plans. On 2026-11-22 Railway
+# answered HTTP 429 after three deploys in 35 minutes, and kept answering 429
+# to retries for another 15: about two deploys an hour is what it sustains, so
+# the default pause is 25 minutes. Stops at the first failure so nothing piles up.
 #
 # Results are appended to $RESULTS (default: ./serial-publish.tsv).
 set -u
 [ $# -ge 3 ] || { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 OWNER=$1; INFRA=$2; shift 2
-SPACING=${SPACING:-420}
+SPACING=${SPACING:-1500}
 RESULTS=${RESULTS:-serial-publish.tsv}
 MSG=${MSG:-"ci: republish image after the move back to github.com/$OWNER"}
 DEPLOY_WORKFLOW=${DEPLOY_WORKFLOW:-Deploy}
@@ -71,14 +76,30 @@ for item in "$@"; do
   note "$item: waiting for $INFRA deploys to be idle"
   wait_deploy_idle || { note "$item: $INFRA deploy never went idle; stopping"; exit 1; }
   started=$(now)
+  case "$item" in deploy:*)
+    svc=${item#deploy:}
+    gh workflow run deploy.yml -R "$OWNER/$INFRA" -f action=deploy -f service_id="$svc" >/dev/null 2>&1 \
+      || { note "$item: dispatch failed"; exit 1; }
+    sleep 30; wait_deploy_idle
+    deploys=$(q "repos/$OWNER/$INFRA/actions/runs?per_page=30&created=%3E$started" \
+      --jq "[.workflow_runs[] | select(.name == \"$DEPLOY_WORKFLOW\") | (.conclusion // .status)] | join(\",\")")
+    printf '%s\t%s\t-\truns: -\tdeploys: %s\n' "$(now)" "$item" "${deploys:-none}" >> "$RESULTS"
+    note "$item: deploys: ${deploys:-none}"
+    case ",$deploys," in *,failure,*) note "stopping: $item failed"; exit 1 ;; esac
+    sleep "$SPACING"; continue ;;
+  esac
   def=$(q "repos/$OWNER/$repo" --jq .default_branch)
   if [ -n "$pr" ]; then
     state=$(q "repos/$OWNER/$repo/pulls/$pr" --jq '.state + " " + (.mergeable_state // "unknown")')
     if [ "$state" != "open clean" ]; then
       note "$item: pull request is '$state', not merging"; printf '%s\t%s\tskipped\t%s\n' "$(now)" "$item" "$state" >> "$RESULTS"; continue
     fi
-    sha=$(gh api -X PUT "repos/$OWNER/$repo/pulls/$pr/merge" -f merge_method=squash --jq .sha 2>/dev/null) \
-      || { note "$item: merge refused"; printf '%s\t%s\tmerge refused\n' "$(now)" "$item" >> "$RESULTS"; continue; }
+    sha=""
+    for m in ${MERGE_METHODS:-squash merge rebase}; do
+      sha=$(gh api -X PUT "repos/$OWNER/$repo/pulls/$pr/merge" -f merge_method="$m" --jq .sha 2>/dev/null) && [ -n "$sha" ] && break
+      sha=""
+    done
+    [ -n "$sha" ] || { note "$item: merge refused"; printf '%s\t%s\tmerge refused\n' "$(now)" "$item" >> "$RESULTS"; continue; }
   else
     head=$(q "repos/$OWNER/$repo/git/ref/heads/$def" --jq .object.sha)
     tree=$(q "repos/$OWNER/$repo/git/commits/$head" --jq .tree.sha)

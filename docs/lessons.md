@@ -77,8 +77,16 @@ Lost or changed:
   `settings` + `verify` for ~100 repos costs roughly 2,500 requests.
 - Re-running an old publish/deploy/release run rebuilds and redeploys old code.
   Push a fresh commit or dispatch the workflow on the head instead.
-- Deploy pipelines share third-party rate limits (Railway answered 429 when ten
-  repos published at once). Push reference fixes one repo at a time.
+- Deploy pipelines share third-party rate limits. Railway sustains about two
+  full OpenTofu plans an hour for this fleet: three deploys in 35 minutes drew
+  HTTP 429, and retries during the cool-down failed too (and count against the
+  limit). Use `scripts/serial-publish.sh`; budget 30 minutes per repo that
+  deploys.
+- A caller workflow regenerated with `[skip ci]` has not been proven. Publish
+  once from each repo afterwards: registry access and the dispatch token are
+  per repo.
+- An empty commit does not trigger a workflow that has `paths` or
+  `paths-ignore` filters. Dispatch it instead.
 - Two Pages redirect sites pointing at each other loop. When project sites move
   back, empty the forward list of the site on the side they returned to.
 - Keep dual-owner matchers (OIDC trust lists, URL allow-lists that accept both
