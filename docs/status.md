@@ -2,7 +2,7 @@
 
 Single source of truth for the running migration. Update it as work lands.
 
-**Last updated:** 2026-11-22 03:05 UTC
+**Last updated:** 2026-11-22 03:25 UTC
 **State:** repos moved and verified; machines repointed; **reference fixes inside repos in progress.**
 
 Local state for this run (not in git): `state/crvouga-organization--crvouga/` on
@@ -61,7 +61,7 @@ Its OpenTofu apply generates the `publish.yml` caller workflow in the app repos.
 | personal | 446 (+32 review) | Deploy gate on repo name, OpenTofu `owner`, inventory, generated `llms*.txt`, portfolio data | agent (running) | in progress |
 | mockingbird | 948 (+403 review) | mostly generated docs/`llms.txt`, package metadata, release + health scripts | agent (running) | in progress |
 | atlas | 306 (+11) | schema `$id` URLs, docs, generated `llms*.txt`, release + health scripts, image owner | done | ✅ PR [#116](https://github.com/crvouga/atlas/pull/116) merged; `main` green; `ghcr.io/crvouga/atlas` and `atlas-insecure` republished and public |
-| gamezilla | 60 + owner ID | text links, plus the numeric owner ID in `libs/infra-shared-ts/tofu/global.tfvars.json` and the `PRODUCT_IDENTITY_JSON` repo variable | in progress | CI identity recovered in Infisical (one in-place update, from the Mac Studio session). PR [#447](https://github.com/crvouga/gamezilla/pull/447) verifying; merge when `verify:end` is green, then check Release (AWS trust, `main` policy) |
+| gamezilla | 60 + owner ID | text links, plus the numeric owner ID in `libs/infra-shared-ts/tofu/global.tfvars.json` and the `PRODUCT_IDENTITY_JSON` repo variable | agent (running, MS-A2) | CI identity recovered; `main` ruleset restored; auto-merge armed on PR [#447](https://github.com/crvouga/gamezilla/pull/447). **Blocked by `main` itself:** nine PRs (#435–#445) were merged with no checks while Actions was off. Lint and a stale generated file are fixed on the branch (`12e2773`); Storybook layout checks (battleship, chess, connect-four, game-frame) fail since the space-chrome PRs #438/#443/#444 and are being fixed on the branch. Then: Release run (AWS trust). |
 | dev-fleet | 49 (+2) | package metadata, schema URLs, release | done | ✅ PR [#199](https://github.com/crvouga/dev-fleet/pull/199) merged; CI + Release green; `@crvouga/dev-fleet@0.9.5` published from `crvouga/dev-fleet` (npm trust works) |
 | fleet | 32 | publish caller, docs | after `personal` | not started |
 | moviefinder | 29 | publish caller, docs | after `personal` | not started |

@@ -59,6 +59,11 @@ Lost or changed:
   User accounts have no audit log: snapshot rulesets before deleting any.
 - **`[skip ci]` in the commit subject** lets a cosmetic fix land in a repo whose
   push pipeline publishes or deploys.
+- **Merges made while checks cannot run leave `main` red for everyone after.**
+  During the Actions outage nine PRs were merged into one repo unverified; the
+  first PR opened afterwards (the migration's own) inherited every failure.
+  Before a move, and before deleting branch rules to get around an outage, note
+  which merges were unverified so they can be re-verified first.
 - **An auto-merge workflow plus a missing required check merges instantly.**
   Restore branch rules before opening pull requests.
 
