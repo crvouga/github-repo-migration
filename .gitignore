@@ -221,3 +221,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Migration state: per-repo snapshots and logs (they name private repos)
+/state/
